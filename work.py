@@ -130,4 +130,4 @@ def disconnect():
 
 # Start the Flask app with SocketIO support
 if __name__ == "__main__":
-    socketio.run(app, debug=True, use_reloader=False)
+    socketio.run(app, debug=True, allow_unsafe_werkzeug=True, use_reloader=False)
