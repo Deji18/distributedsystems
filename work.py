@@ -9,7 +9,6 @@ app.config["SECRET_KEY"] = "hjhjsdahhds"  # Secret key for session encryption
 socketio = SocketIO(app)
 
 rooms = {}  # Dictionary to store room information
-private_chats = {}  # Add a dictionary to track private chats between users
 
 
 # Function to generate a unique room code
@@ -25,12 +24,6 @@ def generate_unique_code(length):
     return code
 
 
-def get_room_data():
-    room = session.get("room")
-    name = session.get("name")
-    return room, name
-
-
 # Route for home page
 @app.route("/", methods=["POST", "GET"])
 def home():
@@ -40,52 +33,48 @@ def home():
         code = request.form.get("code")
         join = request.form.get("join", False)
         create = request.form.get("create", False)
-        is_public = request.form.get("public", False) == "true"
+        is_public = request.form.get("public", False) 
 
         if not name:
-            return render_template("home.html", error="Please enter a name.", code=code, name=name)
+            return render_template("home.html", error="Please enter a name.", code=code, name=name, public_room_list=get_public_rooms())
 
         if join!= False and not code:
-            return render_template("home.html", error="Please enter a room code.", code=code, name=name)
+            return render_template("home.html", error="Please enter a room code.", code=code, name=name, public_room_list=get_public_rooms())
 
         room = code
         if create!= False:  # If user wants to create a new room
             room = generate_unique_code(4)  # Generate a unique room code
-            rooms[room] = {"creator": name, "members": [name], "messages": [], "public": is_public}  # Initialize room
+            rooms[room] = { "members": 0, "messages": [], "public": is_public, "creator": name}  # Initialize room
             # data
 
         elif code not in rooms:  # If joining an existing room
-            return render_template("home.html", error="Room does not exist.", code=code, name=name)
+            return render_template("home.html", error="Room does not exist.", code=code, name=name, public_room_list=get_public_rooms())
 
         session["room"] = room  # Store room code in session
         session["name"] = name  # Store user's name in session
         return redirect(url_for("room"))  # Redirect to the room page
+    
+    return render_template("home.html", public_room_list=get_public_rooms())
 
+def get_public_rooms():
+    return [{"code": code, "creator": details["creator"]} for code, details in rooms.items() if details["public"]]
 
-# Pass the list of public rooms to the template
-    public_room_list = [{"code": code, "creator": rooms[code]["creator"]} for code in rooms if rooms[code]["public"]]
-    return render_template("home.html", public_room_list=public_room_list)
 
 
 # Route for room page
 @app.route("/room")
 def room():
-    room, name = get_room_data()
-    if not room or not name or room not in rooms:
+    room = session.get ("room")
+    if room is None or session.get("name") is None or room not in rooms:
         return redirect(url_for("home"))
 
-    # Fetch the list of members in the room
-    members = [member for member in rooms[room]["members"] if member != name]
-
-    # Fetch private messages for the current user
-    private_messages = private_chats.get(name, {}).get("messages", [])
-    return render_template("room.html", code=room, messages=rooms[room]["messages"], members=members, private_messages=private_messages)  # Render the room page template
-
+    return render_template("room.html", code=room, messages=rooms[room]["messages"])  # Render the room page template
 
 # Event handler for receiving messages
 @socketio.on("message")
 def message(data):
-    room, name = get_room_data()
+    room = session.get ("room")
+    name = session.get ("name")
     if room not in rooms:
         return  # If room does not exist, ignore the message
     content = {
@@ -96,11 +85,11 @@ def message(data):
     rooms[room]["messages"].append(content)  # Store the message in the room's message history
     print(f"{session.get('name')} said: {data['data']}")  # Print the message to the console
 
-
 # Event handler for client connection
 @socketio.on("connect")
 def connect(auth):
-    room, name = get_room_data()
+    room = session.get ("room")
+    name = session.get ("name")
     if not room or not name:
         return  # If session data is missing, do nothing
     if room not in rooms:
@@ -112,11 +101,11 @@ def connect(auth):
     rooms[room]["members"] += 1  # Increment member count for the room
     print(f"{name} joined room {room}")  # Print to console
 
-
 # Event handler for client disconnection
 @socketio.on("disconnect")
 def disconnect():
-    room, name = get_room_data()
+    room  = session.get ("room")
+    name  = session.get ("name")
     leave_room(room)  # Leave the current room
 
     if room in rooms:
@@ -127,7 +116,8 @@ def disconnect():
     send({"name": name, "message": "has left the room"}, to=room)  # Broadcast exit message to room
     print(f"{name} has left the room {room}")  # Print to console
 
-
 # Start the Flask app with SocketIO support
 if __name__ == "__main__":
-    socketio.run(app, host='192.168.56.1', port=5001, debug=True, allow_unsafe_werkzeug=True, use_reloader=False)
+    socketio.run(app,host='172.20.10.6',port=5000, debug=True, allow_unsafe_werkzeug=True, use_reloader=False)
+	
+
